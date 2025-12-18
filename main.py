@@ -1,8 +1,18 @@
 from fastapi import FastAPI, Query, HTTPException
+from pydantic import BaseModel
 import json
 from collections import defaultdict
 
 app = FastAPI()
+
+class PipelineParseResponse(BaseModel):
+    """
+    Stable response contract for frontend.
+    All fields are always present with consistent types.
+    """
+    node_count: int
+    edge_count: int
+    is_dag: bool
 
 def has_cycle(graph):
     """
@@ -60,11 +70,16 @@ def build_graph(edges):
 def read_root():
     return {'Ping': 'Pong'}
 
-@app.get('/pipelines/parse')
-def parse_pipeline(pipeline: str = Query(...)):
+@app.get('/pipelines/parse', response_model=PipelineParseResponse)
+def parse_pipeline(pipeline: str = Query(...)) -> PipelineParseResponse:
     """
     Parse pipeline data and return deterministic statistics.
     Trust input format and compute node/edge counts with cycle detection.
+    
+    Response contract guaranteed by Pydantic model:
+    - node_count: int (always present)
+    - edge_count: int (always present)
+    - is_dag: bool (always present)
     """
     try:
         # Parse the JSON string
@@ -89,12 +104,12 @@ def parse_pipeline(pipeline: str = Query(...)):
         has_cycles = has_cycle(graph)
         is_dag = not has_cycles
         
-        # Return clean JSON with statistics
-        return {
-            'node_count': node_count,
-            'edge_count': edge_count,
-            'is_dag': is_dag
-        }
+        # Return guaranteed stable response format
+        return PipelineParseResponse(
+            node_count=node_count,
+            edge_count=edge_count,
+            is_dag=is_dag
+        )
     
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON format in pipeline parameter")
